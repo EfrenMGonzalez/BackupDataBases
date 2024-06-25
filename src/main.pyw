@@ -1,24 +1,53 @@
 import pyodbc
-import datetime
+from datetime import datetime
 import os
+import yaml
+import tkinter as tk
+from tkinter import messagebox
+import psutil
+import schedule
+import time
 
-fecha_actual = datetime.datetime.now().strftime("%Y%m%d")
-# Configuración para la conexión a SQL Server
-server = '10.0.0.12'
-username = 'SA'
-password = 'Mexico2006'
-backup_dir = fr'\\10.0.0.17\BACKUP_TRESS$\DIARIO\{fecha_actual}\\'  # Directorio donde se guardará el respaldo
 
-def crear_carpeta():
-    if not os.path.exists(backup_dir):
+config = {
+    'server': '',
+    'username': '',
+    'password': '',
+    'backup_dir': '',
+    'hora_respaldo':''
+}
+
+# Función para guardar la configuración en un archivo YAML
+def guardar_configuracion(ip, usuario, contrasena, ubicacion,hora):
+    config = {
+        'server': ip,
+        'username': usuario,
+        'password': contrasena,
+        'backup_dir': ubicacion,
+        'hora_respaldo':hora
+    }
+    with open('configuracion.yaml', 'w') as file:
+        yaml.dump(config, file)
+    messagebox.showinfo("Información", "Configuración guardada correctamente")
+    root.quit()
+
+def leer_configuracion():
+    global config
+    with open('configuracion.yaml', 'r') as file:
+        config = yaml.safe_load(file)
+
+def crear_carpeta(backup_folder):
+    if not os.path.exists(backup_folder):
         # Crear la carpeta
-        os.makedirs(backup_dir)
-        print(f"La carpeta '{backup_dir}' se creó correctamente.")
+        os.makedirs(backup_folder)
+        print(f"La carpeta '{backup_folder}' se creó correctamente.")
     else:
-        print(f"La carpeta '{backup_dir}' ya existe.")
-def backup_completo():
+        print(f"La carpeta '{backup_folder}' ya existe.")
+
+def backup_completo(backup_folder):
+    crear_carpeta(backup_folder)
     # Crear una conexión
-    conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};UID={username};PWD={password}'
+    conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config['server']};UID={config['username']};PWD={config['password']}'
     conn = pyodbc.connect(conn_str)
     conn.autocommit = True
     cursor = conn.cursor()
@@ -37,7 +66,7 @@ def backup_completo():
                    # Obtener la marca de tiempo actual para el nombre del archivo de respaldo
                     timestamp_inicio = datetime.datetime.now()
                     print(f"Inicio de respaldo {database_name} Hora: {timestamp_inicio.strftime('%H:%M:%S')}")
-                    backup_file = os.path.join(backup_dir, f"{database_name}.bak")
+                    backup_file = os.path.join(backup_folder, f"{database_name}.bak")
 
                     # Comando de respaldo (asegurándote de usar corchetes si el nombre de la base de datos contiene guiones)
                     backup_command = f"BACKUP DATABASE [{database_name}] TO DISK='{backup_file}' WITH COMPRESSION, MEDIADESCRIPTION='{database_name} Backup';"
@@ -67,9 +96,9 @@ def backup_completo():
     cursor.close()
     conn.close()
 
-def backup_especifico(bases_a_respaldar):
+def backup_especifico(bases_a_respaldar,backup_folder):
     # Crear una conexión
-    conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};UID={username};PWD={password}'
+    conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config['server']};UID={config['username']};PWD={config['password']}'
     conn = pyodbc.connect(conn_str)
     conn.autocommit = True
     cursor = conn.cursor()
@@ -80,7 +109,7 @@ def backup_especifico(bases_a_respaldar):
             # Obtener la marca de tiempo actual para el nombre del archivo de respaldo
             timestamp_inicio = datetime.datetime.now().strftime("%H:%M:%S")
             print(f"Incio de respaldo {database_name} Hora : {timestamp_inicio}")
-            backup_file = os.path.join(backup_dir, f"{database_name}.bak")
+            backup_file = os.path.join(backup_folder, f"{database_name}.bak")
             
             # Comando de respaldo
             backup_command = f"BACKUP DATABASE [{database_name}] TO DISK='{backup_file}' WITH COMPRESSION, MEDIADESCRIPTION='{database_name} Backup';"
@@ -103,12 +132,96 @@ def backup_especifico(bases_a_respaldar):
     # Cerrar la conexión
     cursor.close()
     conn.close()
+def print_server_info(backup_folder):
+    print(config['server'])
+    print(config['username'])
+    print(config['password'])
+    print(backup_folder)
+    print(config['hora_respaldo'])
 
+def checar_espacio_disponible(ruta):
+    # Obtener el uso del disco
+    uso_disco = psutil.disk_usage(ruta)
+    
+    # Mostrar la información del uso del disco
+    print(f"Ruta: {ruta}")
+    print(f"Total: {uso_disco.total / (1024 ** 3):.2f} GB")
+    print(f"Usado: {uso_disco.used / (1024 ** 3):.2f} GB")
+    print(f"Libre: {uso_disco.free / (1024 ** 3):.2f} GB")
+    print(f"Porcentaje usado: {uso_disco.percent}%")
+    return uso_disco
 
+def cancelar():
+    root.quit()
 
+def respaldo_programado(folder):
+    # Programa la tarea para que se ejecute todos los días a las 10:30
+    hora_str = config['hora_respaldo']
+    print(hora_str)
+  
+    schedule.every().day.at(hora_str).do(backup_completo(folder))
+ 
+    while True:
+        print()
+        schedule.run_pending()
+        time.sleep(1)
+        
 if __name__ == "__main__":
-    crear_carpeta()
-    backup_completo()
+    if not os.path.exists('configuracion.yaml'):
+        root = tk.Tk()
+        root.geometry('200x450')
+        root.title("Configuración del Programa")
+
+        # Crear etiquetas y entradas para los datos del servidor
+        tk.Label(root, text="IP del Servidor:").pack(pady=5)
+        ip_entry = tk.Entry(root)
+        ip_entry.pack(pady=5)
+
+        tk.Label(root, text="Usuario de BD:").pack(pady=5)
+        usuario_entry = tk.Entry(root)
+        usuario_entry.pack(pady=5)
+
+        tk.Label(root, text="Contraseña:").pack(pady=5)
+        contrasena_entry = tk.Entry(root, show="*")
+        contrasena_entry.pack(pady=5)
+
+        tk.Label(root, text="Ubicación de Respaldo:").pack(pady=5)
+        ubicacion_entry = tk.Entry(root)
+        ubicacion_entry.pack(pady=5)
+
+        tk.Label(root, text="Hora del respaldo:").pack(pady=5)
+        horario_entry = tk.Entry(root)
+        horario_entry.pack(pady=5)
+        
+
+        # Crear botones de Guardar y Cancelar
+        tk.Button(root, text="Guardar", command=lambda: guardar_configuracion(
+            ip_entry.get(), usuario_entry.get(), contrasena_entry.get(), ubicacion_entry.get(), horario_entry.get())).pack(pady=20)
+        tk.Button(root, text="Cancelar", command=cancelar).pack(pady=5)
+
+        root.mainloop()
+    else:
+        leer_configuracion()
+        root = tk.Tk()
+        root.geometry('300x450')
+        root.title("Respaldos")
+        fecha_actual = datetime.now().strftime("%Y%m%d")
+        backup_folder = fr'{config['backup_dir']}\{fecha_actual}\\'
+        disco = checar_espacio_disponible(config['backup_dir'])
+        label=tk.Label(root, text=f"Servidor:{config['server']}\nEspacio disponible: {disco.total / (1024 ** 3):.2f}Gb\nEspacio Usado: {disco.used / (1024 ** 3):.2f}Gb\nEspacio Libre: {disco.free / (1024 ** 3):.2f}Gb ", anchor="w", justify="left")
+        # Empacar el Label
+        label.pack(side="top", anchor="w", pady=20)
+        
+        tk.Button(root, text="Iniciar Respaldo", command=lambda:backup_completo(backup_folder)).pack(side="left", padx=10, pady=10)
+        tk.Button(root, text="Iniciar Respaldo Programado",command = lambda:respaldo_programado(backup_folder)).pack(side="left", padx=10, pady=10)
+        tk.Button(root, text="Salir", command=root.quit).pack(side="left", padx=10, pady=10)
+
+
+        root.mainloop()
+
+
+    #crear_carpeta()
+    #backup_completo()
     #backup_completo()
     #bases= ["NCOMPARTE","KIOSKOTEK"]
     #backup_especifico(bases)
