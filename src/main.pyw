@@ -1,5 +1,5 @@
 import pyodbc
-from datetime import datetime
+import datetime
 import os
 import yaml
 import tkinter as tk
@@ -89,12 +89,13 @@ def backup_completo(backup_folder):
                     print(f"Respaldo completado en el servidor: {backup_file} Hora: {timestamp_final.strftime('%H:%M:%S')}")
                     print(f"Duración del respaldo: {tiempo_transcurrido}")
             except Exception as e:
-            
                 print(f"Error durante el respaldo: {e}")
+                messagebox.showerror(f"Error al respaldar{database_name}",f"Se presento un error al respaldar la base de datos.\nError:{e}")
 
     # Cerrar la conexión
     cursor.close()
     conn.close()
+    messagebox.showinfo("Informacion", "Las bases de datos han sido respaldadas correctamente.")
 
 def backup_especifico(bases_a_respaldar,backup_folder):
     # Crear una conexión
@@ -132,6 +133,7 @@ def backup_especifico(bases_a_respaldar,backup_folder):
     # Cerrar la conexión
     cursor.close()
     conn.close()
+
 def print_server_info(backup_folder):
     print(config['server'])
     print(config['username'])
@@ -159,10 +161,10 @@ def respaldo_programado(folder):
     hora_str = config['hora_respaldo']
     print(hora_str)
   
-    schedule.every().day.at(hora_str).do(backup_completo(folder))
+    schedule.every().day.at(hora_str).do(backup_completo,folder)
  
     while True:
-        print()
+       
         schedule.run_pending()
         time.sleep(1)
         
@@ -205,7 +207,7 @@ if __name__ == "__main__":
         root = tk.Tk()
         root.geometry('300x450')
         root.title("Respaldos")
-        fecha_actual = datetime.now().strftime("%Y%m%d")
+        fecha_actual = datetime.datetime.now().strftime("%Y%m%d")
         backup_folder = fr'{config['backup_dir']}\{fecha_actual}\\'
         disco = checar_espacio_disponible(config['backup_dir'])
         label=tk.Label(root, text=f"Servidor:{config['server']}\nEspacio disponible: {disco.total / (1024 ** 3):.2f}Gb\nEspacio Usado: {disco.used / (1024 ** 3):.2f}Gb\nEspacio Libre: {disco.free / (1024 ** 3):.2f}Gb ", anchor="w", justify="left")
