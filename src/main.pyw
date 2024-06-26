@@ -16,7 +16,6 @@ config = {
     'backup_dir': '',
     'hora_respaldo':''
 }
-
 # Función para guardar la configuración en un archivo YAML
 def guardar_configuracion(ip, usuario, contrasena, ubicacion,hora):
     config = {
