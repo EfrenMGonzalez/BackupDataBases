@@ -3,6 +3,7 @@ import datetime
 import os
 import yaml
 import tkinter as tk
+from tkinter import ttk
 from tkinter import messagebox, scrolledtext
 import psutil
 import schedule
@@ -18,6 +19,21 @@ config = {
     'hora_respaldo': '',
     'config_key':''
 }
+
+def getDataBases():
+    password = descifrar_contrasena(config["password"], config["config_key"])
+    conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config["server"]};UID={config["username"]};PWD={password}'
+    conn = pyodbc.connect(conn_str)
+    
+    cursor = conn.cursor()
+    query = "SELECT name FROM sys.databases WHERE name NOT IN ('master', 'model', 'msdb', 'tempdb')"
+            
+
+    cursor.execute(query)
+    databases = [row.name for row in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return databases
 
 def generar_clave():
     return Fernet.generate_key()
@@ -94,35 +110,44 @@ def backup_completo(backup_folder):#Codigo para respaldar todas las bases de dat
 
     cursor.close()
     conn.close()
+    global disco
     log(f"Todas las bases de datos han sido respaldadas.")
+    disco=checar_espacio_disponible(backup_folder)
     #messagebox.showinfo("Información", "Las bases de datos han sido respaldadas correctamente.")
 
-def backup_especifico(bases_a_respaldar, backup_folder):#Epecificar bases de datos que se desean respaldar
-    conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config["server"]};UID={config["username"]};PWD={config["password"]}'
+def backup_especifico(database_name, backup_folder):#Epecificar bases de datos que se desean respaldar
+    crear_carpeta(backup_folder)
+    password = descifrar_contrasena(config["password"], config["config_key"])
+    conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config["server"]};UID={config["username"]};PWD={password}'
     conn = pyodbc.connect(conn_str)
     conn.autocommit = True
     cursor = conn.cursor()
 
+   
+    
     try:
-        for database_name in bases_a_respaldar:
-            timestamp_inicio = datetime.datetime.now()
-            log(f"Incio de respaldo {database_name} Hora: {timestamp_inicio.strftime('%H:%M:%S')}")
-            backup_file = os.path.join(backup_folder, f"{database_name}.bak")
-            backup_command = f"BACKUP DATABASE [{database_name}] TO DISK='{backup_file}' WITH COMPRESSION, MEDIADESCRIPTION='{database_name} Backup';"
-            cursor.execute(backup_command)
-            while cursor.nextset():
-                pass
-            timestamp_final = datetime.datetime.now()
-            diferencia = timestamp_final - timestamp_inicio
-            diferencia_segundos = int(diferencia.total_seconds())
-            log(f"Respaldo completado en el servidor: {backup_file} Hora: {timestamp_final.strftime('%H:%M:%S')}")
-            log(f"Duración del respaldo: {str(datetime.timedelta(seconds=diferencia_segundos))}")
+        timestamp_inicio = datetime.datetime.now()
+        log(f"Inicio de respaldo {database_name} Hora: {timestamp_inicio.strftime('%H:%M:%S')}")
+        backup_file = os.path.join(backup_folder, f"{database_name}.bak")
+        backup_command = f"BACKUP DATABASE [{database_name}] TO DISK='{backup_file}' WITH COMPRESSION, MEDIADESCRIPTION='{database_name} Backup';"
+        cursor.execute(backup_command)
+        while cursor.nextset():
+            pass
+        timestamp_final = datetime.datetime.now()
+        diferencia = timestamp_final - timestamp_inicio
+        diferencia_segundos = int(diferencia.total_seconds())
+        tiempo_transcurrido = str(datetime.timedelta(seconds=diferencia_segundos))
+        log(f"Respaldo completado: {backup_file} Hora: {timestamp_final.strftime('%H:%M:%S')}")
+        log(f"Duración del respaldo: {tiempo_transcurrido}")
     except Exception as e:
-        timestamp_finalerror = datetime.datetime.now().strftime("%H:%M:%S")
-        log(f"Error durante el respaldo de {database_name}: {e} Hora: {timestamp_finalerror}")
+        log(f"Error durante el respaldo de {database_name}: {e}")
+        #messagebox.showerror(f"Error al respaldar {database_name}", f"Se presentó un error al respaldar la base de datos.\nError: {e}")
 
     cursor.close()
     conn.close()
+    global disco
+    log(f"La base de datos {database_name} fue respaldada con exito!.")
+    disco=checar_espacio_disponible(backup_folder)
 
 def print_server_info(backup_folder):#Informaciondel servidor
     log(f"Servidor: {config['server']}")
@@ -137,6 +162,13 @@ def checar_espacio_disponible(ruta):
     log(f"Libre: {uso_disco.free / (1024 ** 3):.2f} GB")
     log(f"Porcentaje usado: {uso_disco.percent}%")
     return uso_disco
+
+def verificaCombo(valor,ruta):
+    if(valor==""):
+        log(f"No se seleciono ninguna base de datos")
+        messagebox.showerror(f"Error 404", f"No se seleciono ninguna base de datos")
+    else:
+        backup_especifico(valor,ruta)
 
 def cancelar():
     root.quit()
@@ -193,20 +225,50 @@ if __name__ == "__main__":
         root = tk.Tk()
         root.geometry('500x500')
         root.title("Respaldos")
-        fecha_actual = datetime.datetime.now().strftime("%Y%m%d")
-        global log_text
-        log_text = scrolledtext.ScrolledText(root, state=tk.DISABLED, height=10)
-        log_text.pack(pady=10)
 
+        # Obtener fecha actual
+        fecha_actual = datetime.datetime.now().strftime("%Y%m%d")
+
+        # Crear área de texto desplazable para el registro
+        log_text = scrolledtext.ScrolledText(root, state=tk.DISABLED, height=10)
+        log_text.grid(row=0, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+
+        # Ruta de la carpeta de respaldo
         backup_folder = fr'{config["backup_dir"]}\{fecha_actual}\\'
+
+        # Espacio disponible en disco
+        global disco
         disco = checar_espacio_disponible(config['backup_dir'])
 
-        label = tk.Label(root, text=f"Servidor: {config['server']}\nEspacio disponible: {disco.total / (1024 ** 3):.2f}GB\nEspacio Usado: {disco.used / (1024 ** 3):.2f}GB\nEspacio Libre: {disco.free / (1024 ** 3):.2f}GB", anchor="w", justify="left")
-        label.pack(side="top", anchor="w", pady=20)
+        # Mostrar información del servidor y espacio libre
+        label = tk.Label(root, text=f"Servidor: {config['server']}", anchor="w", justify="left")
+        label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
 
-        
-        tk.Button(root, text="Iniciar Respaldo", command=lambda: threading.Thread(target=backup_completo, args=(backup_folder,)).start()).pack(side="left", padx=10, pady=10)
-        tk.Button(root, text="Iniciar Respaldo Programado", command=lambda: threading.Thread(target=respaldo_programado, args=(backup_folder,)).start()).pack(side="left", padx=10, pady=10)
-        tk.Button(root, text="Salir", command=root.quit).pack(side="left", padx=10, pady=10)
+        # ComboBox para seleccionar la base de datos
+        DBnames = ttk.Combobox(root, values=getDataBases())
+        DBnames.grid(row=2, column=0, padx=10, pady=10, sticky="w")
 
+        # Botón para respaldo específico
+        btn_respaldo_especifico = tk.Button(root, text="Respaldo Especifico", command=lambda: threading.Thread(target=verificaCombo, args=(DBnames.get(), backup_folder)).start())
+        btn_respaldo_especifico.grid(row=2, column=1, padx=10, pady=10, sticky="w")
+
+        # Botón para iniciar respaldo completo
+        btn_backup_completo = tk.Button(root, text="Iniciar Respaldo", command=lambda: threading.Thread(target=backup_completo, args=(backup_folder,)).start())
+        btn_backup_completo.grid(row=3, column=0, padx=10, pady=10, sticky="w")
+
+        # Botón para iniciar respaldo programado
+        btn_respaldo_programado = tk.Button(root, text="Iniciar Respaldo Programado", command=lambda: threading.Thread(target=respaldo_programado, args=(backup_folder,)).start())
+        btn_respaldo_programado.grid(row=4, column=0, padx=10, pady=10, sticky="w")
+
+        # Botón para salir de la aplicación
+        btn_salir = tk.Button(root, text="Salir", command=root.quit)
+        btn_salir.grid(row=5, column=0, padx=10, pady=10, sticky="w")
+
+        # Ajustar el tamaño y la posición de los widgets usando grid
+        root.grid_rowconfigure(0, weight=1)
+        root.grid_rowconfigure(1, weight=1)
+        root.grid_columnconfigure(0, weight=1)
+        root.grid_columnconfigure(1, weight=1)
+
+        # Ejecutar la aplicación
         root.mainloop()
