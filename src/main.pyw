@@ -115,6 +115,15 @@ def backup_completo(backup_folder):#Codigo para respaldar todas las bases de dat
     disco=checar_espacio_disponible(backup_folder)
     #messagebox.showinfo("Información", "Las bases de datos han sido respaldadas correctamente.")
 
+def probar_conexion(ip, usuario, contrasena):
+    try:
+        conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={ip};UID={usuario};PWD={contrasena}'
+        conn = pyodbc.connect(conn_str)
+        conn.close()
+        messagebox.showinfo("Información", "Conexión exitosa")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo conectar a la base de datos: {e}")
+        
 def backup_especifico(database_name, backup_folder):#Epecificar bases de datos que se desean respaldar
     crear_carpeta(backup_folder)
     password = descifrar_contrasena(config["password"], config["config_key"])
@@ -123,7 +132,7 @@ def backup_especifico(database_name, backup_folder):#Epecificar bases de datos q
     conn.autocommit = True
     cursor = conn.cursor()
 
-   
+  
     
     try:
         timestamp_inicio = datetime.datetime.now()
@@ -214,6 +223,9 @@ if __name__ == "__main__":
         tk.Label(root, text="Hora del respaldo:").pack(pady=5)
         horario_entry = tk.Entry(root)
         horario_entry.pack(pady=5)
+
+        tk.Button(root, text="Probar Conexión", command=lambda: probar_conexion(
+            ip_entry.get(), usuario_entry.get(), contrasena_entry.get())).pack(pady=5)
 
         tk.Button(root, text="Guardar", command=lambda: guardar_configuracion(
             ip_entry.get(), usuario_entry.get(), contrasena_entry.get(), ubicacion_entry.get(), horario_entry.get())).pack(pady=20)
