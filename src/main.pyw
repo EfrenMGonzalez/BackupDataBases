@@ -76,7 +76,9 @@ def crear_carpeta(backup_folder):
     else:
         log(f"La carpeta '{backup_folder}' ya existe.")
 
-def backup_completo(backup_folder):#Codigo para respaldar todas las bases de datos en el servidor.
+def backup_completo(folder):#Codigo para respaldar todas las bases de datos en el servidor.
+    fecha_actual = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    backup_folder =fr"{folder}\{fecha_actual}\\"
     crear_carpeta(backup_folder)
     password = descifrar_contrasena(config["password"], config["config_key"])
     conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config["server"]};UID={config["username"]};PWD={password}'
@@ -89,7 +91,7 @@ def backup_completo(backup_folder):#Codigo para respaldar todas las bases de dat
 
     for db in databases:
         database_name = db[0]
-        if database_name not in ('master', 'model', 'msdb', 'tempdb'):
+        if database_name  in ('master', 'model', 'msdb', 'tempdb'):
             try:
                 timestamp_inicio = datetime.datetime.now()
                 log(f"Inicio de respaldo {database_name} Hora: {timestamp_inicio.strftime('%H:%M:%S')}")
@@ -124,7 +126,9 @@ def probar_conexion(ip, usuario, contrasena):
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo conectar a la base de datos: {e}")
         
-def backup_especifico(database_name, backup_folder):#Epecificar bases de datos que se desean respaldar
+def backup_especifico(database_name, folder):#Epecificar bases de datos que se desean respaldar
+    fecha_actual = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    backup_folder =fr"{folder}\{fecha_actual}\\"
     crear_carpeta(backup_folder)
     password = descifrar_contrasena(config["password"], config["config_key"])
     conn_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config["server"]};UID={config["username"]};PWD={password}'
@@ -261,15 +265,15 @@ if __name__ == "__main__":
         DBnames.grid(row=2, column=0, padx=10, pady=10, sticky="w")
 
         # Botón para respaldo específico
-        btn_respaldo_especifico = tk.Button(root, text="Respaldo Especifico", command=lambda: threading.Thread(target=verificaCombo, args=(DBnames.get(), backup_folder)).start())
+        btn_respaldo_especifico = tk.Button(root, text="Respaldo Especifico", command=lambda: threading.Thread(target=verificaCombo, args=(DBnames.get(), config["backup_dir"])).start())
         btn_respaldo_especifico.grid(row=2, column=1, padx=10, pady=10, sticky="w")
 
         # Botón para iniciar respaldo completo
-        btn_backup_completo = tk.Button(root, text="Iniciar Respaldo", command=lambda: threading.Thread(target=backup_completo, args=(backup_folder,)).start())
+        btn_backup_completo = tk.Button(root, text="Iniciar Respaldo", command=lambda: threading.Thread(target=backup_completo, args=(config["backup_dir"],)).start())
         btn_backup_completo.grid(row=3, column=0, padx=10, pady=10, sticky="w")
 
         # Botón para iniciar respaldo programado
-        btn_respaldo_programado = tk.Button(root, text="Iniciar Respaldo Programado", command=lambda: threading.Thread(target=respaldo_programado, args=(backup_folder,)).start())
+        btn_respaldo_programado = tk.Button(root, text="Iniciar Respaldo Programado", command=lambda: threading.Thread(target=respaldo_programado, args=(config["backup_dir"],)).start())
         btn_respaldo_programado.grid(row=4, column=0, padx=10, pady=10, sticky="w")
 
         # Botón para salir de la aplicación
